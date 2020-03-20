@@ -1,4 +1,4 @@
-const { initializePeerToPeer, mineBlock, addTransaction, createAccount, getCurrentBlockchain } = require('./p2p/network');
+const { initializePeerToPeer, mineBlock, addTransaction, createAccount, getCurrentBlockchain, getCurrentAccounts } = require('./p2p/network');
 const cors = require('cors');
 const express = require('express');
 const morgan = require('morgan');
@@ -25,20 +25,25 @@ app.listen(app.get('port'), _ => {
 
 app.post('/transaction', async function (req, res) {
   const response = await addTransaction(req.body)
-  res.send(response)
+  res.send({message:response})
 })
 
 app.post('/createaccount', async function (req, res) {
   const response = await createAccount(req.body)
-  res.send(response)
+  res.send({message:response})
 })
 
 app.post('/mine', async function (req, res) {
   const response = await mineBlock()
-  res.send(response)
+  res.send({message:response})
 })
 
 app.get('/blockchain', async function (req, res) {
   response = await getCurrentBlockchain();
+  res.send(response)
+})
+
+app.get('/accounts', async function (req, res) {
+  response = await getCurrentAccounts();
   res.send(response)
 })

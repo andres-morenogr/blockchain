@@ -54,6 +54,12 @@ const addDBHashToBlock = function (block) {
   return;
 }
 
+const updateBlockHash = function (block) {
+  blockHash = sha256(JSON.stringify(block));
+  block.blockHeader['blockHash'] = blockHash;
+  return;
+}
+
 const mineBlock = async () => {
   console.log('Entered mine block');
   let lastBlock = _.last(blockchain);
@@ -108,19 +114,22 @@ const createAccount = async (account) => {
 
 const addTransaction = async (transaction) => {
   console.log('Entered add transaction')
-  let lastBlockBody = _.last(blockchain)['blockBody']
+  let lastBlock = _.last(blockchain)
+  let lastBlockBody = lastBlock['blockBody']
 
   if (lastBlockBody.length >= 4) {
     return 'Not enough space in block please mine';
   } else {
-    lastBlockBody.push(transaction)
-    executeTransaction(transaction)
+    lastBlockBody.push(transaction);
+    executeTransaction(transaction);
+    //updateBlockHash(lastBlock);
     const message = {
       action: 'addTransaction',
       data: transaction
     }
-    console.log(accounts)
-    console.log(JSON.stringify(message))
+
+    console.log(accounts);
+    console.log(JSON.stringify(message));
     for (let id in peers) {
       peers[id].conn.write(JSON.stringify(message));
     }
@@ -145,7 +154,7 @@ const obtainCurrentAccounts = async () => {
   console.log('Enetered obtain current accounts')
   const message = {
     action: 'obtainAccounts',
-    data : currentAccountId
+    data: currentAccountId
   }
   console.log(peers)
 
@@ -179,6 +188,11 @@ const sendCurrentBlockChain = async (nodeId) => {
 const getCurrentBlockchain = async () => {
   console.log('getcurrentblockchain');
   return blockchain;
+}
+
+const getCurrentAccounts = async () => {
+  console.log('getcurrentaccounts');
+  return accounts;
 }
 
 const executeTransaction = async (transaction) => {
@@ -257,18 +271,22 @@ const initializePeerToPeer = async (port, channel) => {
         case 'addMinedBlock':
           let lastBlock = _.last(blockchain);
           addMerkleRootToBlock(lastBlock);
-          addDBHashToBlock(lastBlock)
+          addDBHashToBlock(lastBlock);
+          //updateBlockHash(lastBlock);
           blockchain.push(message.data);
           break;
         case 'createAccount':
           accounts.push(message.data);
+          accounts = _.uniq(accounts,'id')
           break;
         case 'obtainAccounts':
           sendCurrentAccounts(peerId);
-          accounts.push({id:message.data,balance:0});
+          accounts.push({ id: message.data, balance: 0 });
+          accounts = _.uniq(accounts,'id')
           break;
         case 'sendCurrentAccounts':
           accounts = message.data.concat(accounts);
+          accounts = _.uniq(accounts,'id')
           break;
       }
     });
@@ -287,7 +305,7 @@ const initializePeerToPeer = async (port, channel) => {
     peers[peerId].seq = seq;
     connectionSequence++;
 
-    if (connectionSequence == 1 && !_.isEqual(currentNodeId, peerId)) {
+    if (connectionSequence != 1 && !_.isEqual(currentNodeId, peerId)) {
       if (!_.isEqual(port, '6000')) {
         console.log('asking for current blockchain')
         obtainCurrentBlockchain();
@@ -331,7 +349,7 @@ const initializePeerToPeer = async (port, channel) => {
 
     newBlock.blockBody.push(initialTransaction);
     executeTransaction(initialTransaction);
-
+    //updateBlockHash(newBlock);
     blockchain.push(newBlock);
     console.log(accounts);
     console.log(blockchain);
@@ -339,4 +357,4 @@ const initializePeerToPeer = async (port, channel) => {
   }
 }
 
-module.exports = { initializePeerToPeer, mineBlock, addTransaction, createAccount, getCurrentBlockchain }
+module.exports = { initializePeerToPeer, mineBlock, addTransaction, createAccount, getCurrentBlockchain, getCurrentAccounts }
