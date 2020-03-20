@@ -31,6 +31,7 @@ const peers = {};
 let connectionSequence = 0;
 let accounts = [];
 let blockchain = [];
+const difficulty = 2;
 // Peer Identity, a random hash for identify your peer
 const currentNodeId = crypto.randomBytes(32);
 console.log('Your identity: ' + currentNodeId.toString('hex'));
@@ -58,7 +59,6 @@ const mineBlock = async () => {
   let lastBlock = _.last(blockchain);
   addMerkleRootToBlock(lastBlock);
   addDBHashToBlock(lastBlock)
-  const difficulty = 2;
   const nonce = proofOfWork(JSON.stringify(lastBlock), difficulty);
   const previousBlockHash = sha256(JSON.stringify(lastBlock));
   const timestamp = Date.now();
@@ -68,7 +68,7 @@ const mineBlock = async () => {
     nonce: nonce,
     timestamp: timestamp,
     difficulty: difficulty,
-    height : blockchain.length
+    height: blockchain.length
   }
 
   const newBlock = {
@@ -144,7 +144,8 @@ const obtainCurrentBlockchain = async () => {
 const obtainCurrentAccounts = async () => {
   console.log('Enetered obtain current accounts')
   const message = {
-    action: 'obtainAccounts'
+    action: 'obtainAccounts',
+    data : currentAccountId
   }
   console.log(peers)
 
@@ -264,6 +265,7 @@ const initializePeerToPeer = async (port, channel) => {
           break;
         case 'obtainAccounts':
           sendCurrentAccounts(peerId);
+          accounts.push({id:message.data,balance:0});
           break;
         case 'sendCurrentAccounts':
           accounts = message.data.concat(accounts);
@@ -285,8 +287,7 @@ const initializePeerToPeer = async (port, channel) => {
     peers[peerId].seq = seq;
     connectionSequence++;
 
-    if (connectionSequence != 1 && !_.isEqual(currentNodeId,peerId)) {
-      console.log('asking for blockchain');
+    if (connectionSequence == 1 && !_.isEqual(currentNodeId, peerId)) {
       if (!_.isEqual(port, '6000')) {
         console.log('asking for current blockchain')
         obtainCurrentBlockchain();
@@ -312,7 +313,7 @@ const initializePeerToPeer = async (port, channel) => {
       previousBlockHash: previousBlockHash,
       nonce: nonce,
       timestamp: timestamp,
-      difficulty : difficulty,
+      difficulty: difficulty,
       height: 0
     }
 
