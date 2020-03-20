@@ -5,7 +5,23 @@ const readline = require('readline');
 const _ = require('lodash');
 const { proofOfWork, sha256 } = require('./proofOfWork');
 
+// reference to redline interface
+/**
+ * Function for safely call console.log with readline interface active
+ */
 
+let rl;
+
+function log() {
+  if (rl) {
+    rl.clearLine();
+    rl.close();
+    rl = undefined;
+  }
+  for (let i = 0, len = arguments.length; i < len; i++) {
+    console.log(arguments[i]);
+  }
+}
 /**
  * Here we will save our TCP peer connections
  * using the peer id as key: { peer_id: TCP_Connection }
@@ -17,7 +33,7 @@ let accounts = [];
 let blockchain = [];
 // Peer Identity, a random hash for identify your peer
 const currentNodeId = crypto.randomBytes(32);
-log('Your identity: ' + currentNodeId.toString('hex'));
+console.log('Your identity: ' + currentNodeId.toString('hex'));
 
 const currentAccountId = `miner#${Date.now()}`;
 accounts.push({
@@ -25,26 +41,10 @@ accounts.push({
   balance: 0
 });
 
-// reference to redline interface
-let rl;
-/**
- * Function for safely call log with readline interface active
- */
-function log() {
-  if (rl) {
-    rl.clearLine();
-    rl.close();
-    rl = undefined;
-  }
-  for (let i = 0, len = arguments.length; i < len; i++) {
-    log(arguments[i]);
-  }
-}
-
 const mineBlock = async () => {
-  log('Entered mine block');
+  console.log('Entered mine block');
   const lastBlock = _.last(blockchain);
-  const nonce = proofOfWork(JSON.stringify(lastBlock));
+  const nonce = proofOfWork(JSON.stringify(lastBlock),2);
   const previousBlockHash = sha256(JSON.stringify(lastBlock));
   const timestamp = Date.now();
 
@@ -74,14 +74,14 @@ const mineBlock = async () => {
 }
 
 const createAccount = async (account) => {
-  log('Entered create account')
+  console.log('Entered create account')
   accounts.push(account)
   const message = {
     action: 'createAccount',
     data: account
   }
 
-  log(JSON.stringify(message))
+  console.log(JSON.stringify(message))
   for (let id in peers) {
     peers[id].conn.write(JSON.stringify(message));
   }
@@ -90,7 +90,7 @@ const createAccount = async (account) => {
 }
 
 const addTransaction = async (transaction) => {
-  log('Entered add transaction')
+  console.log('Entered add transaction')
   let lastBlockBody = _.last(blockchain)['blockBody']
 
   if (lastBlockBody.length >= 4) {
@@ -102,8 +102,8 @@ const addTransaction = async (transaction) => {
       action: 'addTransaction',
       data: transaction
     }
-
-    log(JSON.stringify(message))
+    console.log(accounts)
+    console.log(JSON.stringify(message))
     for (let id in peers) {
       peers[id].conn.write(JSON.stringify(message));
     }
@@ -113,11 +113,11 @@ const addTransaction = async (transaction) => {
 }
 
 const obtainCurrentBlockchain = async () => {
-  log('Enetered obtain current blockchain')
+  console.log('Enetered obtain current blockchain')
   const message = {
     action: 'obtainBlockchain'
   }
-  log(peers)
+  console.log(peers)
 
   for (let id in peers) {
     peers[id].conn.write(JSON.stringify(message));
@@ -125,11 +125,11 @@ const obtainCurrentBlockchain = async () => {
 }
 
 const obtainCurrentAccounts = async () => {
-  log('Enetered obtain current accounts')
+  console.log('Enetered obtain current accounts')
   const message = {
     action: 'obtainAccounts'
   }
-  log(peers)
+  console.log(peers)
 
   for (let id in peers) {
     peers[id].conn.write(JSON.stringify(message));
@@ -137,29 +137,29 @@ const obtainCurrentAccounts = async () => {
 }
 
 const sendCurrentAccounts = async (nodeId) => {
-  log('sendcurrentaccounts');
+  console.log('sendcurrentaccounts');
   const message = {
     action: 'sendCurrentBlockchain',
     data: accounts
   }
-  log(nodeId.toString());
+  console.log(nodeId.toString());
 
   peers[nodeId].conn.write(JSON.stringify(message));
 }
 
 const sendCurrentBlockChain = async (nodeId) => {
-  log('sendcurrentblockchain');
+  console.log('sendcurrentblockchain');
   const message = {
     action: 'sendCurrentBlockchain',
     data: blockchain
   }
-  log(nodeId.toString());
+  console.log(nodeId.toString());
 
   peers[nodeId].conn.write(JSON.stringify(message));
 }
 
 const getCurrentBlockchain = async () => {
-  log('getcurrentblockchain');
+  console.log('getcurrentblockchain');
   return blockchain;
 }
 
@@ -189,7 +189,7 @@ const sw = Swarm(config);
 const initializePeerToPeer = async (port, channel) => {
 
   sw.listen(port)
-  log('Listening to port: ' + port)
+  console.log('Listening to port: ' + port)
   sw.join(channel)
 
   sw.on('connection', (conn, info) => {
@@ -197,14 +197,14 @@ const initializePeerToPeer = async (port, channel) => {
     const seq = connectionSequence
 
     const peerId = info.id.toString('hex')
-    log(`Connected #${seq} to peer: ${peerId}`)
+    console.log(`Connected #${seq} to peer: ${peerId}`)
 
     // Keep alive TCP connection with peer
     if (info.initiator) {
       try {
         conn.setKeepAlive(true, 600)
       } catch (exception) {
-        log('exception', exception)
+        console.log('exception', exception)
       }
     }
 
@@ -248,7 +248,7 @@ const initializePeerToPeer = async (port, channel) => {
     })
 
     conn.on('close', () => {
-      log(`Connection ${seq} closed, peer id: ${peerId}`)
+      console.log(`Connection ${seq} closed, peer id: ${peerId}`)
       if (peers[peerId].seq === seq) {
         delete peers[peerId]
       }
@@ -263,18 +263,18 @@ const initializePeerToPeer = async (port, channel) => {
     connectionSequence++
 
     if (connectionSequence == 1) {
-      log('asking for blockchain');
+      console.log('asking for blockchain');
       if (!_.isEqual(port, '6000')) {
-        log('asking for current blockchain')
+        console.log('asking for current blockchain')
         obtainCurrentBlockchain()
       }
     }
 
   })
 
-  log(port)
+  console.log(port)
   if (_.isEqual(port, '6000')) {
-    log('creating initial block')
+    console.log('creating initial block')
     const nonce = 1;
     const previousBlockHash = "0".repeat(64);
     const timestamp = Date.now();
@@ -305,9 +305,9 @@ const initializePeerToPeer = async (port, channel) => {
     executeTransaction(initialTransaction);
 
     blockchain.push(newBlock);
-    log(accounts);
-    log(blockchain);
-    log(blockchain[0].blockBody);
+    console.log(accounts);
+    console.log(blockchain);
+    console.log(blockchain[0].blockBody);
   }
 }
 
