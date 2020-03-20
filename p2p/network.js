@@ -48,7 +48,7 @@ const addMerkleRootToBlock = function (block) {
 }
 
 const addDBHashToBlock = function (block) {
-  dbHash = sha256(accounts);
+  dbHash = sha256(JSON.stringify(accounts));
   block.blockHeader['dbHash'] = dbHash;
   return;
 }
@@ -67,7 +67,8 @@ const mineBlock = async () => {
     previousBlockHash: previousBlockHash,
     nonce: nonce,
     timestamp: timestamp,
-    difficulty: difficulty
+    difficulty: difficulty,
+    height : blockchain.length
   }
 
   const newBlock = {
@@ -128,8 +129,6 @@ const addTransaction = async (transaction) => {
   }
 }
 
-const up
-
 const obtainCurrentBlockchain = async () => {
   console.log('Enetered obtain current blockchain')
   const message = {
@@ -157,7 +156,7 @@ const obtainCurrentAccounts = async () => {
 const sendCurrentAccounts = async (nodeId) => {
   console.log('sendcurrentaccounts');
   const message = {
-    action: 'sendCurrentBlockchain',
+    action: 'sendCurrentAccounts',
     data: accounts
   }
   console.log(nodeId.toString());
@@ -206,21 +205,21 @@ const sw = Swarm(config);
 
 const initializePeerToPeer = async (port, channel) => {
 
-  sw.listen(port)
-  console.log('Listening to port: ' + port)
-  sw.join(channel)
+  sw.listen(port);
+  console.log('Listening to port: ' + port);
+  sw.join(channel);
 
   sw.on('connection', (conn, info) => {
-    const seq = connectionSequence
+    const seq = connectionSequence;
 
-    const peerId = info.id.toString('hex')
-    console.log(`Connected #${seq} to peer: ${peerId}`)
+    const peerId = info.id.toString('hex');
+    console.log(`Connected #${seq} to peer: ${peerId}`);
 
     if (info.initiator) {
       try {
-        conn.setKeepAlive(true, 600)
+        conn.setKeepAlive(true, 600);
       } catch (exception) {
-        console.log('exception', exception)
+        console.log('exception', exception);
       }
     }
 
@@ -236,11 +235,11 @@ const initializePeerToPeer = async (port, channel) => {
         return;
       }
 
-      action = message.action
+      action = message.action;
       log(
         'Action ----> ' + message.action,
         'Data ----->' + message.data
-      )
+      );
 
       switch (action) {
         case 'obtainBlockchain':
@@ -255,44 +254,55 @@ const initializePeerToPeer = async (port, channel) => {
           executeTransaction(message.data)
           break;
         case 'addMinedBlock':
+          let lastBlock = _.last(blockchain);
+          addMerkleRootToBlock(lastBlock);
+          addDBHashToBlock(lastBlock)
           blockchain.push(message.data);
           break;
         case 'createAccount':
           accounts.push(message.data);
           break;
+        case 'obtainAccounts':
+          sendCurrentAccounts(peerId);
+          break;
+        case 'sendCurrentAccounts':
+          accounts = message.data.concat(accounts);
+          break;
       }
-    })
+    });
 
     conn.on('close', () => {
       console.log(`Connection ${seq} closed, peer id: ${peerId}`)
       if (peers[peerId].seq === seq) {
-        delete peers[peerId]
+        delete peers[peerId];
       }
     })
 
     if (!peers[peerId]) {
-      peers[peerId] = {}
+      peers[peerId] = {};
     }
-    peers[peerId].conn = conn
-    peers[peerId].seq = seq
-    connectionSequence++
+    peers[peerId].conn = conn;
+    peers[peerId].seq = seq;
+    connectionSequence++;
 
-    if (connectionSequence == 1) {
+    if (connectionSequence != 1 && !_.isEqual(currentNodeId,peerId)) {
       console.log('asking for blockchain');
       if (!_.isEqual(port, '6000')) {
         console.log('asking for current blockchain')
-        obtainCurrentBlockchain()
+        obtainCurrentBlockchain();
+        obtainCurrentAccounts();
       }
     }
 
-  })
+  });
 
   console.log(port)
   if (_.isEqual(port, '6000')) {
-    console.log('creating initial block')
+    console.log('creating initial block');
     const nonce = 1;
     const previousBlockHash = "0".repeat(64);
     const timestamp = Date.now();
+
     accounts.push({
       id: 'mine',
       balance: 21000
@@ -301,7 +311,9 @@ const initializePeerToPeer = async (port, channel) => {
     const blockHeader = {
       previousBlockHash: previousBlockHash,
       nonce: nonce,
-      timestamp: timestamp
+      timestamp: timestamp,
+      difficulty : difficulty,
+      height: 0
     }
 
     let newBlock = {
