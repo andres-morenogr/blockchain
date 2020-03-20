@@ -1,9 +1,9 @@
 const crypto = require('crypto');
 const Swarm = require('discovery-swarm');
 const defaults = require('dat-swarm-defaults');
-const readline = require('readline');
 const _ = require('lodash');
 const { proofOfWork, sha256 } = require('./proofOfWork');
+const { generateMerkleRoot } = require('./generateMerkleRoot')
 
 // reference to redline interface
 /**
@@ -41,17 +41,33 @@ accounts.push({
   balance: 0
 });
 
+const addMerkleRootToBlock = function (block) {
+  merkleRoot = generateMerkleRoot(block.blockBody);
+  block.blockHeader['merkleRoot'] = merkleRoot;
+  return;
+}
+
+const addDBHashToBlock = function (block) {
+  dbHash = sha256(accounts);
+  block.blockHeader['dbHash'] = dbHash;
+  return;
+}
+
 const mineBlock = async () => {
   console.log('Entered mine block');
-  const lastBlock = _.last(blockchain);
-  const nonce = proofOfWork(JSON.stringify(lastBlock),2);
+  let lastBlock = _.last(blockchain);
+  addMerkleRootToBlock(lastBlock);
+  addDBHashToBlock(lastBlock)
+  const difficulty = 2;
+  const nonce = proofOfWork(JSON.stringify(lastBlock), difficulty);
   const previousBlockHash = sha256(JSON.stringify(lastBlock));
   const timestamp = Date.now();
 
   const blockHeader = {
     previousBlockHash: previousBlockHash,
     nonce: nonce,
-    timestamp: timestamp
+    timestamp: timestamp,
+    difficulty: difficulty
   }
 
   const newBlock = {
@@ -111,6 +127,8 @@ const addTransaction = async (transaction) => {
     return 'Added correctly';
   }
 }
+
+const up
 
 const obtainCurrentBlockchain = async () => {
   console.log('Enetered obtain current blockchain')
@@ -193,13 +211,11 @@ const initializePeerToPeer = async (port, channel) => {
   sw.join(channel)
 
   sw.on('connection', (conn, info) => {
-    // Connection id
     const seq = connectionSequence
 
     const peerId = info.id.toString('hex')
     console.log(`Connected #${seq} to peer: ${peerId}`)
 
-    // Keep alive TCP connection with peer
     if (info.initiator) {
       try {
         conn.setKeepAlive(true, 600)
@@ -254,7 +270,6 @@ const initializePeerToPeer = async (port, channel) => {
       }
     })
 
-    // Save the connection
     if (!peers[peerId]) {
       peers[peerId] = {}
     }
