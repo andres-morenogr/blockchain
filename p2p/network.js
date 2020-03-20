@@ -1,84 +1,109 @@
-const crypto = require('crypto')
-const Swarm = require('discovery-swarm')
-const defaults = require('dat-swarm-defaults')
-const readline = require('readline')
+const crypto = require('crypto');
+const Swarm = require('discovery-swarm');
+const defaults = require('dat-swarm-defaults');
+const readline = require('readline');
 const _ = require('lodash');
-const {proofOfWork,sha256} = require('./proofOfWork')
+const { proofOfWork, sha256 } = require('./proofOfWork');
 
-let blockchain = []
+
 /**
  * Here we will save our TCP peer connections
  * using the peer id as key: { peer_id: TCP_Connection }
  */
-const peers = {}
-let accounts = {}
-// Counter for connections, used for identify connections
-let connectionSequence = 0
+const peers = {};
 
+let connectionSequence = 0;
+let accounts = [];
+let blockchain = [];
 // Peer Identity, a random hash for identify your peer
-const currentNodeId = crypto.randomBytes(32)
-console.log('Your identity: ' + currentNodeId.toString('hex'))
+const currentNodeId = crypto.randomBytes(32);
+log('Your identity: ' + currentNodeId.toString('hex'));
+
+const currentAccountId = `miner#${Date.now()}`;
+accounts.push({
+  id: currentAccountId,
+  balance: 0
+});
 
 // reference to redline interface
-let rl
+let rl;
 /**
- * Function for safely call console.log with readline interface active
+ * Function for safely call log with readline interface active
  */
-function log () {
+function log() {
   if (rl) {
-    rl.clearLine()
-    rl.close()
-    rl = undefined
+    rl.clearLine();
+    rl.close();
+    rl = undefined;
   }
   for (let i = 0, len = arguments.length; i < len; i++) {
-    console.log(arguments[i])
+    log(arguments[i]);
   }
 }
 
-const mineBlock = async() => {
+const mineBlock = async () => {
+  log('Entered mine block');
   const lastBlock = _.last(blockchain);
   const nonce = proofOfWork(JSON.stringify(lastBlock));
   const previousBlockHash = sha256(JSON.stringify(lastBlock));
   const timestamp = Date.now();
 
   const blockHeader = {
-    previousBlockHash : previousBlockHash,
-    nonce : nonce,
-    timestamp : timestamp
+    previousBlockHash: previousBlockHash,
+    nonce: nonce,
+    timestamp: timestamp
   }
 
   const newBlock = {
-    blockHeader : blockHeader,
-    blockBody : []
+    blockHeader: blockHeader,
+    blockBody: []
   }
 
-  blockchain.push(newBlock)
+  blockchain.push(newBlock);
 
   const message = {
-    action : 'addMinedBlock',
-    data : newBlock
+    action: 'addMinedBlock',
+    data: newBlock
   }
 
   for (let id in peers) {
     peers[id].conn.write(JSON.stringify(message));
   }
+
+  return 'Block mined'
 }
 
-const createAccount = async(account) => {
-  console.log('Entered add transaction')
+const createAccount = async (account) => {
+  log('Entered create account')
+  accounts.push(account)
+  const message = {
+    action: 'createAccount',
+    data: account
+  }
+
+  log(JSON.stringify(message))
+  for (let id in peers) {
+    peers[id].conn.write(JSON.stringify(message));
+  }
+
+  return 'Created correctly';
+}
+
+const addTransaction = async (transaction) => {
+  log('Entered add transaction')
   let lastBlockBody = _.last(blockchain)['blockBody']
 
-  if(lastBlockBody.length >= 2){
+  if (lastBlockBody.length >= 4) {
     return 'Not enough space in block please mine';
-  }else{
+  } else {
     lastBlockBody.push(transaction)
-
+    executeTransaction(transaction)
     const message = {
-      action : 'addTransaction',
-      data : transaction
+      action: 'addTransaction',
+      data: transaction
     }
 
-    console.log(JSON.stringify(message))
+    log(JSON.stringify(message))
     for (let id in peers) {
       peers[id].conn.write(JSON.stringify(message));
     }
@@ -87,52 +112,67 @@ const createAccount = async(account) => {
   }
 }
 
-const addTransaction = async(transaction) => {
-  console.log('Entered add transaction')
-  let lastBlockBody = _.last(blockchain)['blockBody']
-
-  if(lastBlockBody.length >= 2){
-    return 'Not enough space in block please mine';
-  }else{
-    lastBlockBody.push(transaction)
-
-    const message = {
-      action : 'addTransaction',
-      data : transaction
-    }
-
-    console.log(JSON.stringify(message))
-    for (let id in peers) {
-      peers[id].conn.write(JSON.stringify(message));
-    }
-
-    return 'Added correctly';
-  }
-}
-
-const obtainCurrentBlockchain = async() =>{
-  console.log('Enetered obtain current blockchain')
+const obtainCurrentBlockchain = async () => {
+  log('Enetered obtain current blockchain')
   const message = {
-    action : 'obtainBlockchain'
+    action: 'obtainBlockchain'
   }
-  console.log(peers)
+  log(peers)
 
   for (let id in peers) {
     peers[id].conn.write(JSON.stringify(message));
   }
 }
 
-const sendCurrentBlockChain = async(nodeId) =>{
-  console.log('sendcurrentblockchain')
+const obtainCurrentAccounts = async () => {
+  log('Enetered obtain current accounts')
   const message = {
-    action : 'sendCurrentBlockchain',
-    data : blockchain
+    action: 'obtainAccounts'
   }
-  console.log(nodeId)
-  console.log(nodeId.toString())
+  log(peers)
 
-  peers[nodeId].conn.write(JSON.stringify(message))
+  for (let id in peers) {
+    peers[id].conn.write(JSON.stringify(message));
+  }
+}
 
+const sendCurrentAccounts = async (nodeId) => {
+  log('sendcurrentaccounts');
+  const message = {
+    action: 'sendCurrentBlockchain',
+    data: accounts
+  }
+  log(nodeId.toString());
+
+  peers[nodeId].conn.write(JSON.stringify(message));
+}
+
+const sendCurrentBlockChain = async (nodeId) => {
+  log('sendcurrentblockchain');
+  const message = {
+    action: 'sendCurrentBlockchain',
+    data: blockchain
+  }
+  log(nodeId.toString());
+
+  peers[nodeId].conn.write(JSON.stringify(message));
+}
+
+const getCurrentBlockchain = async () => {
+  log('getcurrentblockchain');
+  return blockchain;
+}
+
+const executeTransaction = async (transaction) => {
+  sender = accounts.find(account => _.isEqual(account.id, transaction.sender));
+  receiver = accounts.find(account => _.isEqual(account.id, transaction.receiver));
+  senderIndex = accounts.findIndex(account => _.isEqual(account.id, transaction.sender));
+  receiverIndex = accounts.find(account => _.isEqual(account.id, transaction.receiver));
+  if (sender.balance < transaction.amount) {
+    return;
+  }
+  sender.balance -= transaction.amount;
+  receiver.balance += transaction.amount;
 }
 
 const config = defaults({
@@ -149,7 +189,7 @@ const sw = Swarm(config);
 const initializePeerToPeer = async (port, channel) => {
 
   sw.listen(port)
-  console.log('Listening to port: ' + port)
+  log('Listening to port: ' + port)
   sw.join(channel)
 
   sw.on('connection', (conn, info) => {
@@ -173,41 +213,42 @@ const initializePeerToPeer = async (port, channel) => {
         'Received Message from peer ' + peerId,
         '----> ' + data.toString()
       )
-      try{
+      try {
         message = JSON.parse(data.toString())
-      }catch(error){
+      } catch (error) {
         console.error(error)
         return;
       }
+
       action = message.action
-      // Here we handle incomming messages
       log(
-        'Received Message from peer ' + peerId,
         'Action ----> ' + message.action,
         'Data ----->' + message.data
       )
 
-      switch(action){
+      switch (action) {
         case 'obtainBlockchain':
-          sendCurrentBlockChain(peerId)
+          sendCurrentBlockChain(peerId);
           break;
         case 'sendCurrentBlockchain':
-          console.log(blockchain)
-          blockchain = message.data
+          blockchain = message.data;
           break;
         case 'addTransaction':
-          let lastBlockBody = _.last(blockchain)['blockBody']
-          lastBlockBody.push(message.data)
+          let lastBlockBody = _.last(blockchain)['blockBody'];
+          lastBlockBody.push(message.data);
+          executeTransaction(message.data)
           break;
         case 'addMinedBlock':
-          blockchain.push(message.data)
-          break;}
+          blockchain.push(message.data);
+          break;
+        case 'createAccount':
+          accounts.push(message.data);
+          break;
+      }
     })
 
     conn.on('close', () => {
-      // Here we handle peer disconnection
       log(`Connection ${seq} closed, peer id: ${peerId}`)
-      // If the closing connection is the last connection with the peer, removes the peer
       if (peers[peerId].seq === seq) {
         delete peers[peerId]
       }
@@ -221,36 +262,53 @@ const initializePeerToPeer = async (port, channel) => {
     peers[peerId].seq = seq
     connectionSequence++
 
-    if(connectionSequence == 1){
-      console.log('asking for blockchain');
-      if(!_.isEqual(port,'6000')){
-        console.log('asking for current blockchain')
+    if (connectionSequence == 1) {
+      log('asking for blockchain');
+      if (!_.isEqual(port, '6000')) {
+        log('asking for current blockchain')
         obtainCurrentBlockchain()
       }
     }
 
   })
 
-  console.log(port)
-  if(_.isEqual(port,'6000')){
-    console.log('creating initial block')
+  log(port)
+  if (_.isEqual(port, '6000')) {
+    log('creating initial block')
     const nonce = 1;
     const previousBlockHash = "0".repeat(64);
     const timestamp = Date.now();
+    accounts.push({
+      id: 'mine',
+      balance: 21000
+    })
 
     const blockHeader = {
-      previousBlockHash : previousBlockHash,
-      nonce : nonce,
-      timestamp : timestamp
+      previousBlockHash: previousBlockHash,
+      nonce: nonce,
+      timestamp: timestamp
     }
 
-    const newBlock = {
-      blockHeader : blockHeader,
-      blockBody : []
+    let newBlock = {
+      blockHeader: blockHeader,
+      blockBody: []
     }
 
-    blockchain.push(newBlock)
+    const initialTransaction = {
+      sender: 'mine',
+      receiver: currentAccountId,
+      amount: 5,
+      message: 'First transaction'
+    }
+
+    newBlock.blockBody.push(initialTransaction);
+    executeTransaction(initialTransaction);
+
+    blockchain.push(newBlock);
+    log(accounts);
+    log(blockchain);
+    log(blockchain[0].blockBody);
   }
 }
 
-module.exports = { initializePeerToPeer, mineBlock, addTransaction}
+module.exports = { initializePeerToPeer, mineBlock, addTransaction, createAccount, getCurrentBlockchain }
