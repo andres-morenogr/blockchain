@@ -150,44 +150,22 @@ const addTransaction = async (transaction) => {
 const obtainCurrentBlockchain = async () => {
   console.log('Enetered obtain current blockchain')
   const message = {
-    action: 'obtainBlockchain'
-  }
-  console.log(peers)
-
-  for (let id in peers) {
-    peers[id].conn.write(JSON.stringify(message));
-  }
-}
-
-const obtainCurrentAccounts = async () => {
-  console.log('Enetered obtain current accounts')
-  const message = {
-    action: 'obtainAccounts',
+    action: 'obtainBlockchain',
     data: currentAccountId
   }
-  console.log(peers)
-
   for (let id in peers) {
     peers[id].conn.write(JSON.stringify(message));
   }
-}
-
-const sendCurrentAccounts = async (nodeId) => {
-  console.log('sendcurrentaccounts');
-  const message = {
-    action: 'sendCurrentAccounts',
-    data: accounts
-  }
-  console.log(nodeId.toString());
-
-  peers[nodeId].conn.write(JSON.stringify(message));
 }
 
 const sendCurrentBlockChain = async (nodeId) => {
   console.log('sendcurrentblockchain');
   const message = {
     action: 'sendCurrentBlockchain',
-    data: blockchain
+    data: {
+      blockchain : blockchain,
+      accounts : accounts
+    }
   }
   console.log(nodeId.toString());
 
@@ -268,9 +246,13 @@ const initializePeerToPeer = async (port, channel) => {
       switch (action) {
         case 'obtainBlockchain':
           sendCurrentBlockChain(peerId);
+          accounts.push({ id: message.data, balance: 0 });
+          accounts = _.uniqBy(accounts,"id")
           break;
         case 'sendCurrentBlockchain':
-          blockchain = message.data;
+          blockchain = message.data.blockchain;
+          accounts = message.data.accounts.concat(accounts);
+          accounts = _.uniqBy(accounts,"id")
           break;
         case 'addTransaction':
           let lastBlockBody = _.last(blockchain)['blockBody'];
@@ -286,15 +268,6 @@ const initializePeerToPeer = async (port, channel) => {
           break;
         case 'createAccount':
           accounts.push(message.data);
-          accounts = _.uniq(accounts,'id')
-          break;
-        case 'obtainAccounts':
-          sendCurrentAccounts(peerId);
-          accounts.push({ id: message.data, balance: 0 });
-          accounts = _.uniq(accounts,'id')
-          break;
-        case 'sendCurrentAccounts':
-          accounts = message.data.concat(accounts);
           accounts = _.uniq(accounts,'id')
           break;
       }
@@ -314,11 +287,10 @@ const initializePeerToPeer = async (port, channel) => {
     peers[peerId].seq = seq;
     connectionSequence++;
 
-    if (connectionSequence != 1 && !_.isEqual(currentNodeId, peerId)) {
+    if (connectionSequence != 0 && !_.isEqual(currentNodeId, peerId)) {
       if (!_.isEqual(port, '6000')) {
-        console.log('asking for current blockchain')
+        console.log('asking for current accounts')
         obtainCurrentBlockchain();
-        obtainCurrentAccounts();
       }
     }
 
