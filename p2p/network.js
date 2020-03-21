@@ -84,7 +84,7 @@ const mineBlock = async () => {
 
   blockchain.push(newBlock);
 
-  const message = {
+  let message = {
     action: 'addMinedBlock',
     data: newBlock
   }
@@ -92,6 +92,15 @@ const mineBlock = async () => {
   for (let id in peers) {
     peers[id].conn.write(JSON.stringify(message));
   }
+
+  let transaction = {
+    sender : 'mine',
+    receiver : currentAccountId,
+    amount : 5,
+    message : 'blockMined'
+  }
+
+  addTransaction(transaction);
 
   return 'Block mined'
 }
